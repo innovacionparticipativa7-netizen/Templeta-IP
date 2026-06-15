@@ -35,7 +35,7 @@ header{background:var(--blue);color:#fff;padding:0 28px;height:58px;display:flex
 .field{margin-bottom:20px}
 .field label{display:block;font-size:12px;font-weight:600;color:var(--g600);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
 .req{color:var(--danger);margin-left:2px}
-input[type=text],input[type=number],textarea,select{width:100%;border:2px solid var(--g200);border-radius:8px;padding:10px 13px;font-size:14px;font-family:var(--font);color:var(--g800);background:var(--g50);transition:border-color .2s;outline:none}
+input[type=text],textarea,select{width:100%;border:2px solid var(--g200);border-radius:8px;padding:10px 13px;font-size:14px;font-family:var(--font);color:var(--g800);background:var(--g50);transition:border-color .2s;outline:none}
 input:focus,textarea:focus,select:focus{border-color:var(--blue);background:#fff}
 textarea{resize:vertical;min-height:90px}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -83,15 +83,7 @@ textarea{resize:vertical;min-height:90px}
 .hint{font-size:12px;color:var(--g400);margin-top:3px}
 .error-msg{background:#FFF5F5;border:2px solid #FED7D7;border-radius:8px;padding:11px 14px;color:var(--danger);font-size:14px;margin-top:10px}
 .tpl-banner{background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;padding:10px 14px;margin-bottom:16px;display:flex;align-items:center;gap:8px;font-size:13px;color:#166534}
-@media(max-width:600px){
-  .card{padding:22px 18px}
-  .field-row{grid-template-columns:1fr}
-  .preview-grid{grid-template-columns:1fr}
-  .full{grid-column:span 1}
-  .colab-item{grid-template-columns:1fr 100px 34px}
-  .step-label{display:none}
-  .step-item{width:50px}
-}
+.debug-box{background:#1E293B;color:#94A3B8;border-radius:8px;padding:12px 14px;font-family:monospace;font-size:11px;margin-top:10px;max-height:120px;overflow-y:auto}
 </style>
 </head>
 <body>
@@ -111,6 +103,7 @@ const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','
 const S={
   step:0,loading:false,error:null,success:false,dlUrl:null,
   templateB64:null,templateName:null,
+  slidePath:null,relsPath:null,
   mes:MESES[new Date().getMonth()],anio:String(new Date().getFullYear()),
   titulo:'',antes_texto:'',antes_img:null,
   despues_texto:'',despues_img:null,
@@ -123,6 +116,7 @@ function b64ToU8(b64){
   const bin=atob(b64);const a=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return a;
 }
+
 function makeRun(text,{sz=1100,bold=false,color=null,typeface=null}={}){
   const r=document.createElementNS(NSA,'a:r');
   const rpr=document.createElementNS(NSA,'a:rPr');
@@ -161,12 +155,24 @@ async function generatePPTX(){
   set({loading:true,error:null});
   try{
     const zip=await JSZip.loadAsync(b64ToU8(S.templateB64));
-    const xmlStr=await zip.file('ppt/slides/slide1.xml').async('string');
+
+    // AUTO-DETECT slide path
+    const allFiles=Object.keys(zip.files);
+    const slidePath=allFiles.find(f=>/ppt\/slides\/slide\d+\.xml$/.test(f)&&!f.includes('_rels'));
+    if(!slidePath)throw new Error('No se encontró el slide. Archivos: '+allFiles.filter(f=>f.endsWith('.xml')).slice(0,8).join(' | '));
+
+    const relsPath=slidePath.replace(/ppt\/slides\/(slide\d+\.xml)/,'ppt/slides/_rels/$1.rels');
+    console.log('Slide path:', slidePath);
+    console.log('Rels path:', relsPath);
+
+    const xmlStr=await zip.file(slidePath).async('string');
     const parser=new DOMParser();
     const doc=parser.parseFromString(xmlStr,'application/xml');
-    if(doc.querySelector('parsererror'))throw new Error('Error al parsear el XML del template');
+    const parseErr=doc.querySelector('parsererror');
+    if(parseErr)throw new Error('XML inválido: '+parseErr.textContent.substring(0,100));
     const ser=new XMLSerializer();
 
+    // HEADER
     const hdr=getShape(doc,'Rectangle 6');
     if(hdr){
       const tb=hdr.getElementsByTagNameNS(NSA,'txBody')[0];
@@ -174,6 +180,8 @@ async function generatePPTX(){
       if(pp[0]){const p0=pp[0];[...p0.getElementsByTagNameNS(NSA,'r')].forEach(r=>p0.removeChild(r));p0.appendChild(makeRun('La idea de ',{sz:2000,bold:true,color:'FFFFFF'}));p0.appendChild(makeRun(S.mes+' '+S.anio,{sz:2000,bold:true,color:'FFE07D'}));}
       if(pp[1]){const p1=pp[1];[...p1.getElementsByTagNameNS(NSA,'r')].forEach(r=>p1.removeChild(r));p1.appendChild(makeRun(S.titulo,{sz:1500,bold:true,color:'FFFFFF'}));}
     }
+
+    // TÍTULO REDONDEADO
     for(const sp of doc.getElementsByTagNameNS(NSP,'sp')){
       const c=sp.getElementsByTagNameNS(NSP,'cNvPr')[0];
       if(c&&c.getAttribute('name')==='Rectangle \u00e0 coins arrondis 3'){
@@ -181,6 +189,8 @@ async function generatePPTX(){
         if(tb){clearTx(tb);tb.appendChild(makePara(makeRun(S.titulo,{sz:1400,bold:true,color:'1E293B'}),{noBullet:true,align:'ctr'}));}
       }
     }
+
+    // TABLAS
     const t13=getFrame(doc,'Tableau 13');
     if(t13){setCell(t13,0,0,'Antes',{sz:1050});setCell(t13,1,0,S.antes_texto,{sz:1100});}
     const t14=getFrame(doc,'Tableau 14');
@@ -199,31 +209,38 @@ async function generatePPTX(){
         else tb.appendChild(makePara());
       }
     }
-    zip.file('ppt/slides/slide1.xml',ser.serializeToString(doc));
+    zip.file(slidePath,ser.serializeToString(doc));
 
-    const rxml=await zip.file('ppt/slides/_rels/slide1.xml.rels').async('string');
-    const rdoc=parser.parseFromString(rxml,'application/xml');
-    let imgN=100;
-    async function addImg(imgObj,x,y,cx,cy){
-      if(!imgObj||!imgObj.data)return;
-      const rId='rId'+imgN++;const fname='user_'+rId+'.'+imgObj.ext;
-      zip.file('ppt/media/'+fname,b64ToU8(imgObj.data));
-      const rel=rdoc.createElementNS(NSREL,'Relationship');
-      rel.setAttribute('Id',rId);rel.setAttribute('Type','http://schemas.openxmlformats.org/officeDocument/2006/relationships/image');rel.setAttribute('Target','../media/'+fname);
-      rdoc.documentElement.appendChild(rel);
-      const picXml='<p:pic xmlns:p="'+NSP+'" xmlns:a="'+NSA+'" xmlns:r="'+NSR+'"><p:nvPicPr><p:cNvPr id="'+(9000+imgN)+'" name="UI_'+rId+'"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="'+rId+'"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="'+x+'" y="'+y+'"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>';
-      const lat=await zip.file('ppt/slides/slide1.xml').async('string');
-      const ldoc=parser.parseFromString(lat,'application/xml');
-      const spTree=ldoc.getElementsByTagNameNS(NSP,'spTree')[0];
-      if(spTree){spTree.appendChild(ldoc.importNode(parser.parseFromString(picXml,'application/xml').documentElement,true));zip.file('ppt/slides/slide1.xml',ser.serializeToString(ldoc));}
+    // RELS
+    const relsFile=zip.file(relsPath);
+    if(relsFile){
+      const rxml=await relsFile.async('string');
+      const rdoc=parser.parseFromString(rxml,'application/xml');
+      let imgN=100;
+      async function addImg(imgObj,x,y,cx,cy){
+        if(!imgObj||!imgObj.data)return;
+        const rId='rId'+imgN++;const fname='user_'+rId+'.'+imgObj.ext;
+        zip.file('ppt/media/'+fname,b64ToU8(imgObj.data));
+        const rel=rdoc.createElementNS(NSREL,'Relationship');
+        rel.setAttribute('Id',rId);rel.setAttribute('Type','http://schemas.openxmlformats.org/officeDocument/2006/relationships/image');rel.setAttribute('Target','../media/'+fname);
+        rdoc.documentElement.appendChild(rel);
+        const picXml='<p:pic xmlns:p="'+NSP+'" xmlns:a="'+NSA+'" xmlns:r="'+NSR+'"><p:nvPicPr><p:cNvPr id="'+(9000+imgN)+'" name="UI_'+rId+'"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="'+rId+'"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="'+x+'" y="'+y+'"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>';
+        const lat=await zip.file(slidePath).async('string');
+        const ldoc=parser.parseFromString(lat,'application/xml');
+        const spTree=ldoc.getElementsByTagNameNS(NSP,'spTree')[0];
+        if(spTree){spTree.appendChild(ldoc.importNode(parser.parseFromString(picXml,'application/xml').documentElement,true));zip.file(slidePath,ser.serializeToString(ldoc));}
+      }
+      await addImg(S.antes_img,201920,1820000,4200000,1380000);
+      await addImg(S.despues_img,6700000,1280000,2200000,760000);
+      zip.file(relsPath,ser.serializeToString(rdoc));
     }
-    await addImg(S.antes_img,201920,1820000,4200000,1380000);
-    await addImg(S.despues_img,6700000,1280000,2200000,760000);
-    zip.file('ppt/slides/_rels/slide1.xml.rels',ser.serializeToString(rdoc));
 
     const blob=await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.presentationml.presentation',compression:'DEFLATE'});
     set({loading:false,success:true,dlUrl:URL.createObjectURL(blob)});
-  }catch(err){console.error(err);set({loading:false,error:err.message});}
+  }catch(err){
+    console.error('Error completo:',err);
+    set({loading:false,error:err.message});
+  }
 }
 
 async function loadTemplate(e){
@@ -256,16 +273,12 @@ function imgUp(id,cur){
 
 function render(){
   const app=document.getElementById('app');if(!app)return;
-
   if(S.step===0){
-    app.innerHTML='<div class="card" style="text-align:center;padding:48px 36px"><h2 style="color:#0070C0;margin-bottom:8px">Cargar Template</h2><p style="color:#475569;margin-bottom:28px;font-size:14px">Selecciona tu archivo <strong>Template_IP.pptx</strong> para comenzar.<br>Solo se necesita una vez por sesión.</p><div class="img-upload" style="max-width:380px;margin:0 auto;padding:30px" onclick="document.getElementById(\'tpl\').click()"><input type="file" id="tpl" accept=".pptx"/><p style="font-size:28px;margin-bottom:8px">📂</p><p style="font-size:15px"><strong>Clic para seleccionar</strong></p><p>Template_IP.pptx</p></div></div>';
+    app.innerHTML='<div class="card" style="text-align:center;padding:48px 36px"><h2 style="color:#0070C0;margin-bottom:8px">Cargar Template</h2><p style="color:#475569;margin-bottom:28px;font-size:14px">Selecciona tu archivo <strong>Template_IP.pptx</strong> para comenzar.</p><div class="img-upload" style="max-width:380px;margin:0 auto;padding:30px" onclick="document.getElementById(\'tpl\').click()"><input type="file" id="tpl" accept=".pptx"/><p style="font-size:28px;margin-bottom:8px">📂</p><p style="font-size:15px"><strong>Clic para seleccionar</strong></p><p>Template_IP.pptx</p></div></div>';
     document.getElementById('tpl').onchange=loadTemplate;
     return;
   }
-  if(S.loading){
-    app.innerHTML='<div class="card"><div class="loading-box"><div class="spinner"></div><h3>Generando presentación...</h3><p>Construyendo el archivo PowerPoint. Un momento.</p></div></div>';
-    return;
-  }
+  if(S.loading){app.innerHTML='<div class="card"><div class="loading-box"><div class="spinner"></div><h3>Generando presentación...</h3><p>Construyendo el archivo PowerPoint.</p></div></div>';return;}
   if(S.success){
     const fn='IP_'+S.mes+'_'+S.anio+'_'+S.titulo.substring(0,28).replace(/\s+/g,'_')+'.pptx';
     app.innerHTML='<div class="card"><div class="success-box"><div class="success-icon">🎉</div><h2>¡Listo!</h2><p>Tu presentación PowerPoint está lista para descargar.</p><div class="success-btns"><a href="'+S.dlUrl+'" download="'+fn+'" class="btn btn-success" style="text-decoration:none">⬇️ Descargar PPTX</a><button class="btn btn-secondary" id="nuevo">Crear otra IP</button></div></div></div>';
@@ -281,10 +294,10 @@ function render(){
 
   let content='';
   if(S.step===1)content=banner+'<div class="card-title">📋 Información General</div><p class="card-desc">Datos básicos de la idea de propuesta.</p><div class="field-row"><div class="field"><label>Mes <span class="req">*</span></label><select id="mes">'+ms+'</select></div><div class="field"><label>Año <span class="req">*</span></label><select id="anio">'+yrs+'</select></div></div><div class="field"><label>Título <span class="req">*</span></label><input type="text" id="tit" placeholder="Ej: Optimización del proceso de ensamble" value="'+esc(S.titulo)+'" maxlength="120"/><p class="hint">Máximo 120 caracteres</p></div>'+nav;
-  else if(S.step===2)content='<div class="card-title">🔴 Situación Antes</div><p class="card-desc">Describe el problema o situación <strong>antes</strong> de la mejora.</p><div class="field"><label>Descripción ANTES <span class="req">*</span></label><textarea id="at" placeholder="Ej: El proceso tardaba 45 min con errores frecuentes...">'+esc(S.antes_texto)+'</textarea></div><div class="field"><label>Imagen ANTES (opcional)</label>'+imgUp('ai',S.antes_img)+'</div>'+nav;
+  else if(S.step===2)content='<div class="card-title">🔴 Situación Antes</div><p class="card-desc">Describe el problema <strong>antes</strong> de la mejora.</p><div class="field"><label>Descripción ANTES <span class="req">*</span></label><textarea id="at" placeholder="Ej: El proceso tardaba 45 min con errores frecuentes...">'+esc(S.antes_texto)+'</textarea></div><div class="field"><label>Imagen ANTES (opcional)</label>'+imgUp('ai',S.antes_img)+'</div>'+nav;
   else if(S.step===3)content='<div class="card-title">🟢 Situación Después</div><p class="card-desc">Describe el resultado <strong>después</strong> de la mejora.</p><div class="field"><label>Descripción DESPUÉS <span class="req">*</span></label><textarea id="dt" placeholder="Ej: Se redujo a 25 min eliminando pasos redundantes...">'+esc(S.despues_texto)+'</textarea></div><div class="field"><label>Imagen DESPUÉS (opcional)</label>'+imgUp('di',S.despues_img)+'</div>'+nav;
-  else if(S.step===4)content='<div class="card-title">💡 Beneficios y Costo</div><p class="card-desc">Cuantifica los resultados y el costo de implementación.</p><div class="field"><label>Beneficios / Mejoras <span class="req">*</span></label><textarea id="bn" placeholder="Ej: Ahorro $50,000 MXN anuales. Reducción 44% tiempo de ciclo...">'+esc(S.beneficios)+'</textarea><p class="hint">Incluye ahorros económicos, CO₂, calidad, etc.</p></div><div class="field"><label>Costo de Implementación <span class="req">*</span></label><input type="text" id="co" placeholder="Ej: $5,000 MXN · 0€" value="'+esc(S.costo)+'"/></div>'+nav;
-  else if(S.step===5)content='<div class="card-title">👥 Colaboradores</div><p class="card-desc">Agrega a todos los que participaron en la mejora.</p><div class="colab-list" id="cl">'+S.colabs.map((c,i)=>'<div class="colab-item"><input type="text" class="cn" data-i="'+i+'" placeholder="Nombre completo" value="'+esc(c.nombre)+'"/><input type="text" class="ce" data-i="'+i+'" placeholder="# Empleado" value="'+esc(c.empleado)+'"/><button class="btn-remove" data-i="'+i+'">×</button></div>').join('')+'</div><button class="btn-add-colab" id="addC">+ Agregar colaborador</button>'+nav;
+  else if(S.step===4)content='<div class="card-title">💡 Beneficios y Costo</div><p class="card-desc">Cuantifica los resultados y el costo de implementación.</p><div class="field"><label>Beneficios <span class="req">*</span></label><textarea id="bn" placeholder="Ej: Ahorro $50,000 MXN anuales. Reducción 44% tiempo...">'+esc(S.beneficios)+'</textarea></div><div class="field"><label>Costo de Implementación <span class="req">*</span></label><input type="text" id="co" placeholder="Ej: $5,000 MXN · 0€" value="'+esc(S.costo)+'"/></div>'+nav;
+  else if(S.step===5)content='<div class="card-title">👥 Colaboradores</div><p class="card-desc">Agrega a todos los participantes.</p><div class="colab-list" id="cl">'+S.colabs.map((c,i)=>'<div class="colab-item"><input type="text" class="cn" data-i="'+i+'" placeholder="Nombre completo" value="'+esc(c.nombre)+'"/><input type="text" class="ce" data-i="'+i+'" placeholder="# Empleado" value="'+esc(c.empleado)+'"/><button class="btn-remove" data-i="'+i+'">×</button></div>').join('')+'</div><button class="btn-add-colab" id="addC">+ Agregar colaborador</button>'+nav;
   else if(S.step===6){
     const v=S.colabs.filter(c=>c.nombre.trim());
     content='<div class="card-title">✨ Revisión Final</div><p class="card-desc">Confirma los datos y genera tu presentación.</p>'
@@ -295,15 +308,14 @@ function render(){
       +'<div class="preview-field full"><div class="pf-label">💡 Beneficios</div><div class="pf-value" style="font-weight:400;font-size:13px">'+esc(S.beneficios).substring(0,160)+'</div></div>'
       +'<div class="preview-field"><div class="pf-label">💰 Costo</div><div class="pf-value">'+esc(S.costo)+'</div></div>'
       +'<div class="preview-field"><div class="pf-label">👥 Equipo</div><div class="pf-value" style="font-size:12px;font-weight:400">'+v.map(c=>esc(c.nombre)+(c.empleado?' #'+esc(c.empleado):'')).join(' · ')+'</div></div>'
-      +(S.antes_img?'<div class="preview-field"><div class="pf-label">📷 Imagen Antes</div><img src="'+S.antes_img.preview+'" style="width:100%;height:55px;object-fit:cover;border-radius:4px;margin-top:3px"/></div>':'')
-      +(S.despues_img?'<div class="preview-field"><div class="pf-label">📷 Imagen Después</div><img src="'+S.despues_img.preview+'" style="width:100%;height:55px;object-fit:cover;border-radius:4px;margin-top:3px"/></div>':'')
+      +(S.antes_img?'<div class="preview-field"><div class="pf-label">📷 Antes</div><img src="'+S.antes_img.preview+'" style="width:100%;height:55px;object-fit:cover;border-radius:4px;margin-top:3px"/></div>':'')
+      +(S.despues_img?'<div class="preview-field"><div class="pf-label">📷 Después</div><img src="'+S.despues_img.preview+'" style="width:100%;height:55px;object-fit:cover;border-radius:4px;margin-top:3px"/></div>':'')
       +'</div>'
       +'<div class="btn-row"><button class="btn btn-secondary" id="bk">← Regresar</button><button class="btn btn-success" id="gen">✨ Generar Presentación</button></div>'
-      +(S.error?'<div class="error-msg">⚠️ Error: '+esc(S.error)+'</div>':'');
+      +(S.error?'<div class="error-msg">⚠️ '+esc(S.error)+'</div>':'');
   }
 
   const stepper='<div class="stepper"><div class="stepper-line"></div>'+LABS.map((s,i)=>{const n=i+1,cls=n<S.step?'done':n===S.step?'active':'';return'<div class="step-item '+cls+'" data-step="'+n+'"><div class="step-circle">'+(n<S.step?'✓':n)+'</div><div class="step-label">'+s+'</div></div>';}).join('')+'</div>';
-
   app.innerHTML=stepper+'<div class="card">'+content+'</div>';
 
   document.querySelectorAll('.step-item.done').forEach(el=>el.addEventListener('click',()=>set({step:parseInt(el.dataset.step)})));
