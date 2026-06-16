@@ -856,43 +856,38 @@ async function generatePPTX(){
     const ser=new XMLSerializer();
 
     /* HEADER: The idea of XXXX */
-      const hdr=getShape(doc,'Rectangle 6');
-      
-      if(hdr){
-        const paras=[...hdr.getElementsByTagName('*')].filter(e=>e.localName==='p');
-      
-              if(paras[0]){
-        [...paras[0].getElementsByTagName('*')]
-          .filter(e=>e.localName==='r')
-          .forEach(r=>r.parentNode.removeChild(r));
-      
-        paras[0].appendChild(
-          makeRun(
-            'The idea of ' + S.mes + ' ' + S.anio,
-            {
-              sz:2000,
-              bold:true,
-              color:'FFFFFF'
-            }
-          )
-        );
-      }
-      
-        if(paras[1]){
-          [...paras[1].getElementsByTagName('*')]
-            .filter(e=>e.localName==='r')
-            .forEach(r=>r.parentNode.removeChild(r));
-      
-          paras[1].appendChild(
-            makeRun('Title',{
-              sz:2000,
-              bold:true,
-              color:'FFFFFF'
-            })
-          );
-        }
-      }
+      /* HEADER */
+const hdr=getShape(doc,'Rectangle 6');
 
+if(hdr){
+  const tb=[...hdr.getElementsByTagName('*')].find(e=>e.localName==='txBody');
+
+  if(tb){
+    clearTx(tb);
+
+    tb.appendChild(
+      makePara(
+        makeRun('The idea of ' + S.mes + ' ' + S.anio,{
+          sz:2000,
+          bold:true,
+          color:'FFFFFF'
+        }),
+        {noBullet:true}
+      )
+    );
+
+    tb.appendChild(
+      makePara(
+        makeRun('Title',{
+          sz:2000,
+          bold:true,
+          color:'FFFFFF'
+        }),
+        {noBullet:true}
+      )
+    );
+  }
+}
     /* TÍTULO EN RECTÁNGULO GRIS */
     const allSps=[...doc.getElementsByTagName('*')].filter(e=>e.localName==='sp');
 
@@ -1578,115 +1573,107 @@ function render(){
     anio.onchange=e=>set({anio:e.target.value});
   }
 
-  const tit=document.getElementById('tit');
-  if(tit){
-    tit.oninput=e=>{
-      S.titulo=trimLimit(e.target.value,LIMITS.titulo);
-      const n=document.getElementById('nx');
-      if(n) n.disabled=validate(S.step).length>0;
-      render();
-    };
-  }
-
-  const at=document.getElementById('at');
-  if(at){
-    at.oninput=e=>{
-      S.antes_texto=trimLimit(e.target.value,LIMITS.antes_texto);
-      const n=document.getElementById('nx');
-      if(n) n.disabled=validate(S.step).length>0;
-      render();
-    };
-  }
-
-  const ai=document.getElementById('ai');
-  if(ai){
-    ai.onchange=e=>loadImg(e,'antes_img');
-  }
-
-  const clrai=document.getElementById('clr-ai');
-  if(clrai){
-    clrai.onclick=()=>set({antes_img:null});
-  }
-
-  const dt=document.getElementById('dt');
-  if(dt){
-    dt.oninput=e=>{
-      S.despues_texto=trimLimit(e.target.value,LIMITS.despues_texto);
-      const n=document.getElementById('nx');
-      if(n) n.disabled=validate(S.step).length>0;
-      render();
-    };
-  }
-
-  const di=document.getElementById('di');
-  if(di){
-    di.onchange=e=>loadImg(e,'despues_img');
-  }
-
-  const clrdi=document.getElementById('clr-di');
-  if(clrdi){
-    clrdi.onclick=()=>set({despues_img:null});
-  }
-
-  const bn=document.getElementById('bn');
-  if(bn){
-    bn.oninput=e=>{
-      S.beneficios=trimLimit(e.target.value,LIMITS.beneficios);
-      const n=document.getElementById('nx');
-      if(n) n.disabled=validate(S.step).length>0;
-      render();
-    };
-  }
-
-  const co=document.getElementById('co');
-  if(co){
-    co.oninput=e=>{
-      S.costo=trimLimit(e.target.value,LIMITS.costo);
-      const n=document.getElementById('nx');
-      if(n) n.disabled=validate(S.step).length>0;
-      render();
-    };
-  }
-
-  document.querySelectorAll('.cn').forEach(el=>{
-    el.oninput=e=>{
-      const i=+e.target.dataset.i;
-      S.colabs[i].nombre=trimLimit(e.target.value,LIMITS.nombre);
-      const n=document.getElementById('nx');
-      if(n) n.disabled=validate(S.step).length>0;
-    };
-  });
-
-  document.querySelectorAll('.ce').forEach(el=>{
-    el.oninput=e=>{
-      const i=+e.target.dataset.i;
-      S.colabs[i].empleado=trimLimit(e.target.value,LIMITS.empleado);
-    };
-  });
-
-  document.querySelectorAll('.btn-remove').forEach(el=>{
-    el.onclick=e=>{
-      const i=+e.target.dataset.i;
-
-      if(S.colabs.length>1){
-        S.colabs.splice(i,1);
-        set({colabs:[...S.colabs]});
-      }
-    };
-  });
-
-  const addC=document.getElementById('addC');
-  if(addC){
-    addC.onclick=()=>set({
-      colabs:[
-        ...S.colabs,
-        {nombre:'',empleado:''}
-      ]
-    });
-  }
+ const tit=document.getElementById('tit');
+if(tit){
+  tit.oninput=e=>{
+    S.titulo=trimLimit(e.target.value,LIMITS.titulo);
+    const n=document.getElementById('nx');
+    if(n) n.disabled=validate(S.step).length>0;
+  };
 }
 
-render();
+const at=document.getElementById('at');
+if(at){
+  at.oninput=e=>{
+    S.antes_texto=trimLimit(e.target.value,LIMITS.antes_texto);
+    const n=document.getElementById('nx');
+    if(n) n.disabled=validate(S.step).length>0;
+  };
+}
+
+const ai=document.getElementById('ai');
+if(ai){
+  ai.onchange=e=>loadImg(e,'antes_img');
+}
+
+const clrai=document.getElementById('clr-ai');
+if(clrai){
+  clrai.onclick=()=>set({antes_img:null});
+}
+
+const dt=document.getElementById('dt');
+if(dt){
+  dt.oninput=e=>{
+    S.despues_texto=trimLimit(e.target.value,LIMITS.despues_texto);
+    const n=document.getElementById('nx');
+    if(n) n.disabled=validate(S.step).length>0;
+  };
+}
+
+const di=document.getElementById('di');
+if(di){
+  di.onchange=e=>loadImg(e,'despues_img');
+}
+
+const clrdi=document.getElementById('clr-di');
+if(clrdi){
+  clrdi.onclick=()=>set({despues_img:null});
+}
+
+const bn=document.getElementById('bn');
+if(bn){
+  bn.oninput=e=>{
+    S.beneficios=trimLimit(e.target.value,LIMITS.beneficios);
+    const n=document.getElementById('nx');
+    if(n) n.disabled=validate(S.step).length>0;
+  };
+}
+
+const co=document.getElementById('co');
+if(co){
+  co.oninput=e=>{
+    S.costo=trimLimit(e.target.value,LIMITS.costo);
+    const n=document.getElementById('nx');
+    if(n) n.disabled=validate(S.step).length>0;
+  };
+}
+
+document.querySelectorAll('.cn').forEach(el=>{
+  el.oninput=e=>{
+    const i=+e.target.dataset.i;
+    S.colabs[i].nombre=trimLimit(e.target.value,LIMITS.nombre);
+    const n=document.getElementById('nx');
+    if(n) n.disabled=validate(S.step).length>0;
+  };
+});
+
+document.querySelectorAll('.ce').forEach(el=>{
+  el.oninput=e=>{
+    const i=+e.target.dataset.i;
+    S.colabs[i].empleado=trimLimit(e.target.value,LIMITS.empleado);
+  };
+});
+
+document.querySelectorAll('.btn-remove').forEach(el=>{
+  el.onclick=e=>{
+    const i=+e.target.dataset.i;
+
+    if(S.colabs.length>1){
+      S.colabs.splice(i,1);
+      set({colabs:[...S.colabs]});
+    }
+  };
+});
+
+const addC=document.getElementById('addC');
+if(addC){
+  addC.onclick=()=>set({
+    colabs:[
+      ...S.colabs,
+      {nombre:'',empleado:''}
+    ]
+  });
+}
 </script>
 
 </body>
