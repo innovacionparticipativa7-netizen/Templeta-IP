@@ -887,16 +887,15 @@ async function generatePPTX(){
         [...paras[1].getElementsByTagName('*')]
           .filter(e=>e.localName==='r')
           .forEach(r=>r.parentNode.removeChild(r));
-
+      
         paras[1].appendChild(
-          makeRun(S.titulo,{
-            sz:1400,
+          makeRun('Title',{
+            sz:2000,
             bold:true,
             color:'FFFFFF'
           })
         );
       }
-    }
 
     /* TÍTULO EN RECTÁNGULO GRIS */
     const allSps=[...doc.getElementsByTagName('*')].filter(e=>e.localName==='sp');
@@ -913,7 +912,7 @@ async function generatePPTX(){
           tb.appendChild(
             makePara(
               makeRun(S.titulo,{
-                sz:1250,
+                sz:1100,
                 bold:true,
                 color:'1E293B'
               }),
