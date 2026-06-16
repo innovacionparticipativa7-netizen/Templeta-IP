@@ -125,112 +125,166 @@ function makePara(run=null,{noBullet=true,align=null}={}){
   else{const ep=document.createElementNS(NSA,'a:endParaRPr');ep.setAttribute('lang','es-MX');ep.setAttribute('dirty','0');p.appendChild(ep);}
   return p;
 }
-function getShape(doc,name){
-  for(const sp of doc.querySelectorAll('sp')){
-    const c=sp.querySelector('cNvPr');
-    if(c&&c.getAttribute('name')===name)return sp;
-  }return null;
-}
-function getFrame(doc,name){
-  for(const gf of doc.querySelectorAll('graphicFrame')){
-    const c=gf.querySelector('cNvPr');
-    if(c&&c.getAttribute('name')===name)return gf;
-  }return null;
-}
-function getCell(gf,row,col){
-  const rows=gf.querySelectorAll('tr');
-  if(row>=rows.length)return null;
-  const cells=rows[row].querySelectorAll('tc');
-  if(col>=cells.length)return null;
-  return cells[col].querySelector('txBody')||null;
-}
-function clearTx(tb){
-  [...tb.querySelectorAll('p')].forEach(p=>p.parentNode.removeChild(p));
-}
-  function setCell(gf,r,c,txt,opts={}){const tb=getCell(gf,r,c);if(!tb)return;clearTx(tb);tb.appendChild(makePara(makeRun(txt,opts)));}
-
-async function generatePPTX(){
-  set({loading:true,error:null});
-  try{
-    const zip=await JSZip.loadAsync(b64ToU8(TEMPLATE_B64));
-    const allFiles=Object.keys(zip.files);
-    const slidePath=allFiles.find(f=>/ppt\/slides\/slide\d+\.xml$/.test(f)&&!f.includes('_rels'));
-    if(!slidePath)throw new Error('No slide found: '+allFiles.filter(f=>f.endsWith('.xml')).slice(0,6).join(' | '));
-    const relsPath=slidePath.replace(/ppt\/slides\/(slide\d+\.xml)/,'ppt/slides/_rels/$1.rels');
-    const xmlStr=await zip.file(slidePath).async('string');
-    const parser=new DOMParser();
-    const doc=parser.parseFromString(xmlStr,'application/xml');
-    if(doc.querySelector('parsererror'))throw new Error('XML inválido en el template');
-    const ser=new XMLSerializer();
-
-    const hdr=getShape(doc,'Rectangle 6');
-      if(hdr){
-        const tb=hdr.querySelector('txBody');
-        const pp=tb.querySelectorAll('p');
-        if(pp[0]){
-          pp[0].querySelectorAll('r').forEach(r=>r.parentNode.removeChild(r));
-          pp[0].appendChild(makeRun('The idea of ',{sz:2000,bold:true,color:'FFFFFF'}));
-          pp[0].appendChild(makeRun(S.mes+' '+S.anio,{sz:2000,bold:true,color:'FFE07D'}));
-        }
-        if(pp[1]){
-          pp[1].querySelectorAll('r').forEach(r=>r.parentNode.removeChild(r));
-          pp[1].appendChild(makeRun(S.titulo,{sz:1500,bold:true,color:'FFFFFF'}));
-        }
+// ── helpers ──────────────────────────────────────────────
+function findByName(doc, tag, name) {
+  // busca por tag local (sin namespace) y atributo name
+  for (const el of doc.querySelectorAll(tag + ', [name]')) {
+    if (el.localName === tag) {
+      const cnv = el.querySelector('[name]');
+      if (cnv && cnv.getAttribute('name') === name) return el;
+    }
+  }
+  // fallback: recorre todo
+  const all = doc.getElementsByTagName('*');
+  for (const el of all) {
+    if (el.localName === tag) {
+      for (const child of el.getElementsByTagName('*')) {
+        if (child.localName === 'cNvPr' && child.getAttribute('name') === name)
+          return el;
       }
-      for(const sp of doc.querySelectorAll('sp')){
-        const c=sp.querySelector('cNvPr');
-        if(c&&c.getAttribute('name')==='Rectangle \u00e0 coins arrondis 3'){
-          const tb=sp.querySelector('txBody');
-          if(tb){clearTx(tb);tb.appendChild(makePara(makeRun(S.titulo,{sz:1400,bold:true,color:'1E293B'}),{noBullet:true,align:'ctr'}));}
-        }
+    }
+  }
+  return null;
+}
+function getShape(doc, name) { return findByName(doc, 'sp', name); }
+function getFrame(doc, name) { return findByName(doc, 'graphicFrame', name); }
+
+function getCell(gf, row, col) {
+  const rows = [...gf.getElementsByTagName('*')].filter(e => e.localName === 'tr');
+  if (row >= rows.length) return null;
+  const cells = [...rows[row].getElementsByTagName('*')].filter(e => e.localName === 'tc');
+  if (col >= cells.length) return null;
+  const txBodies = [...cells[col].getElementsByTagName('*')].filter(e => e.localName === 'txBody');
+  return txBodies[0] || null;
+}
+
+function clearTx(tb) {
+  const paras = [...tb.getElementsByTagName('*')].filter(e => e.localName === 'p');
+  paras.forEach(p => p.parentNode.removeChild(p));
+}
+
+// ── generar ───────────────────────────────────────────────
+async function generatePPTX() {
+  set({loading: true, error: null});
+  try {
+    const zip = await JSZip.loadAsync(b64ToU8(TEMPLATE_B64));
+    const allFiles = Object.keys(zip.files);
+    const slidePath = allFiles.find(f => /ppt\/slides\/slide\d+\.xml$/.test(f) && !f.includes('_rels'));
+    if (!slidePath) throw new Error('No se encontró slide. Archivos: ' + allFiles.slice(0,8).join(' | '));
+    const relsPath = slidePath.replace(/ppt\/slides\/(slide\d+\.xml)/, 'ppt/slides/_rels/$1.rels');
+
+    const xmlStr = await zip.file(slidePath).async('string');
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlStr, 'application/xml');
+    if (doc.querySelector('parsererror')) throw new Error('XML inválido en el template');
+    const ser = new XMLSerializer();
+
+    // HEADER – Rectangle 6
+    const hdr = getShape(doc, 'Rectangle 6');
+    if (hdr) {
+      const paras = [...hdr.getElementsByTagName('*')].filter(e => e.localName === 'p');
+      if (paras[0]) {
+        [...paras[0].getElementsByTagName('*')].filter(e => e.localName === 'r').forEach(r => r.parentNode.removeChild(r));
+        paras[0].appendChild(makeRun('The idea of ', {sz:2000, bold:true, color:'FFFFFF'}));
+        paras[0].appendChild(makeRun(S.mes + ' ' + S.anio, {sz:2000, bold:true, color:'FFE07D'}));
       }
-    const t13=getFrame(doc,'Tableau 13');
-    if(t13){setCell(t13,0,0,'Antes',{sz:1050});setCell(t13,1,0,S.antes_texto,{sz:1100});}
-    const t14=getFrame(doc,'Tableau 14');
-    if(t14){setCell(t14,0,0,'Despu\u00e9s',{sz:1050});setCell(t14,1,0,S.despues_texto,{sz:1100});}
-    const t15=getFrame(doc,'Tableau 15');
-    if(t15){const tb=getCell(t15,1,0);if(tb){clearTx(tb);tb.appendChild(makePara(makeRun(S.beneficios,{sz:1100,bold:true})));}}
-    const t16=getFrame(doc,'Tableau 16');
-    if(t16){const tb=getCell(t16,0,1);if(tb){clearTx(tb);tb.appendChild(makePara(makeRun(S.costo||'0',{sz:1100}),{noBullet:true,align:'ctr'}));}}
-    const t17=getFrame(doc,'Tableau 17');
-    if(t17){
-      const tb=getCell(t17,1,0);
-      if(tb){
+      if (paras[1]) {
+        [...paras[1].getElementsByTagName('*')].filter(e => e.localName === 'r').forEach(r => r.parentNode.removeChild(r));
+        paras[1].appendChild(makeRun(S.titulo, {sz:1500, bold:true, color:'FFFFFF'}));
+      }
+    }
+
+    // TÍTULO REDONDEADO – Rectangle à coins arrondis 3
+    const allSps = [...doc.getElementsByTagName('*')].filter(e => e.localName === 'sp');
+    for (const sp of allSps) {
+      const cnv = [...sp.getElementsByTagName('*')].find(e => e.localName === 'cNvPr');
+      if (cnv && cnv.getAttribute('name') === 'Rectangle \u00e0 coins arrondis 3') {
+        const tb = [...sp.getElementsByTagName('*')].find(e => e.localName === 'txBody');
+        if (tb) { clearTx(tb); tb.appendChild(makePara(makeRun(S.titulo, {sz:1400, bold:true, color:'1E293B'}), {noBullet:true, align:'ctr'})); }
+      }
+    }
+
+    // Tableau 13 – Antes
+    const t13 = getFrame(doc, 'Tableau 13');
+    if (t13) {
+      const h = getCell(t13, 0, 0); if (h) { clearTx(h); h.appendChild(makePara(makeRun('Problem', {sz:1050}))); }
+      const c = getCell(t13, 1, 0); if (c) { clearTx(c); c.appendChild(makePara(makeRun(S.antes_texto, {sz:1100}))); }
+    }
+
+    // Tableau 14 – Después
+    const t14 = getFrame(doc, 'Tableau 14');
+    if (t14) {
+      const h = getCell(t14, 0, 0); if (h) { clearTx(h); h.appendChild(makePara(makeRun('Proposal applied', {sz:1050}))); }
+      const c = getCell(t14, 1, 0); if (c) { clearTx(c); c.appendChild(makePara(makeRun(S.despues_texto, {sz:1100}))); }
+    }
+
+    // Tableau 15 – Beneficios
+    const t15 = getFrame(doc, 'Tableau 15');
+    if (t15) { const c = getCell(t15, 1, 0); if (c) { clearTx(c); c.appendChild(makePara(makeRun(S.beneficios, {sz:1100, bold:true}))); } }
+
+    // Tableau 16 – Costo
+    const t16 = getFrame(doc, 'Tableau 16');
+    if (t16) { const c = getCell(t16, 0, 1); if (c) { clearTx(c); c.appendChild(makePara(makeRun(S.costo || '0', {sz:1100}), {noBullet:true, align:'ctr'})); } }
+
+    // Tableau 17 – Colaboradores
+    const t17 = getFrame(doc, 'Tableau 17');
+    if (t17) {
+      const tb = getCell(t17, 1, 0);
+      if (tb) {
         clearTx(tb);
-        const v=S.colabs.filter(c=>c.nombre.trim());
-        if(v.length){v.forEach(c=>{const txt=c.empleado.trim()?c.nombre+' #'+c.empleado:c.nombre;tb.appendChild(makePara(makeRun(txt,{sz:1000,bold:true,typeface:'Calibri'})));});}
-        else tb.appendChild(makePara());
+        const v = S.colabs.filter(c => c.nombre.trim());
+        if (v.length) {
+          v.forEach(c => {
+            const txt = c.empleado.trim() ? c.nombre + ' #' + c.empleado : c.nombre;
+            tb.appendChild(makePara(makeRun(txt, {sz:1000, bold:true, typeface:'Calibri'})));
+          });
+        } else tb.appendChild(makePara());
       }
     }
-    zip.file(slidePath,ser.serializeToString(doc));
 
-    const relsFile=zip.file(relsPath);
-    if(relsFile){
-      const rxml=await relsFile.async('string');
-      const rdoc=parser.parseFromString(rxml,'application/xml');
-      let imgN=100;
-      async function addImg(imgObj,x,y,cx,cy){
-        if(!imgObj||!imgObj.data)return;
-        const rId='rId'+imgN++;const fname='user_'+rId+'.'+imgObj.ext;
-        zip.file('ppt/media/'+fname,b64ToU8(imgObj.data));
-        const rel=rdoc.createElementNS(NSREL,'Relationship');
-        rel.setAttribute('Id',rId);rel.setAttribute('Type','http://schemas.openxmlformats.org/officeDocument/2006/relationships/image');rel.setAttribute('Target','../media/'+fname);
+    zip.file(slidePath, ser.serializeToString(doc));
+
+    // IMÁGENES
+    const relsFile = zip.file(relsPath);
+    if (relsFile) {
+      const rxml = await relsFile.async('string');
+      const rdoc = parser.parseFromString(rxml, 'application/xml');
+      let imgN = 100;
+      async function addImg(imgObj, x, y, cx, cy) {
+        if (!imgObj || !imgObj.data) return;
+        const rId = 'rId' + imgN++;
+        const fname = 'user_' + rId + '.' + imgObj.ext;
+        zip.file('ppt/media/' + fname, b64ToU8(imgObj.data));
+        const rel = rdoc.createElementNS(NSREL, 'Relationship');
+        rel.setAttribute('Id', rId);
+        rel.setAttribute('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image');
+        rel.setAttribute('Target', '../media/' + fname);
         rdoc.documentElement.appendChild(rel);
-        const picXml='<p:pic xmlns:p="'+NSP+'" xmlns:a="'+NSA+'" xmlns:r="'+NSR+'"><p:nvPicPr><p:cNvPr id="'+(9000+imgN)+'" name="UI_'+rId+'"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="'+rId+'"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="'+x+'" y="'+y+'"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>';
-        const lat=await zip.file(slidePath).async('string');
-        const ldoc=parser.parseFromString(lat,'application/xml');
-        const spTree=ldoc.getElementsByTagNameNS(NSP,'spTree')[0];
-        if(spTree){spTree.appendChild(ldoc.importNode(parser.parseFromString(picXml,'application/xml').documentElement,true));zip.file(slidePath,ser.serializeToString(ldoc));}
+        const picXml = '<p:pic xmlns:p="'+NSP+'" xmlns:a="'+NSA+'" xmlns:r="'+NSR+'">'
+          +'<p:nvPicPr><p:cNvPr id="'+(9000+imgN)+'" name="UI_'+rId+'"/>'
+          +'<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>'
+          +'<p:blipFill><a:blip r:embed="'+rId+'"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>'
+          +'<p:spPr><a:xfrm><a:off x="'+x+'" y="'+y+'"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm>'
+          +'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>';
+        const lat = await zip.file(slidePath).async('string');
+        const ldoc = parser.parseFromString(lat, 'application/xml');
+        const spTree = [...ldoc.getElementsByTagName('*')].find(e => e.localName === 'spTree');
+        if (spTree) {
+          spTree.appendChild(ldoc.importNode(parser.parseFromString(picXml, 'application/xml').documentElement, true));
+          zip.file(slidePath, ser.serializeToString(ldoc));
+        }
       }
-      await addImg(S.antes_img,201920,1820000,4200000,1380000);
-      await addImg(S.despues_img,6700000,1280000,2200000,760000);
-      zip.file(relsPath,ser.serializeToString(rdoc));
+      await addImg(S.antes_img,   201920, 1820000, 4200000, 1380000);
+      await addImg(S.despues_img, 6700000, 1280000, 2200000,  760000);
+      zip.file(relsPath, ser.serializeToString(rdoc));
     }
-    const blob=await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.presentationml.presentation',compression:'DEFLATE'});
-    set({loading:false,success:true,dlUrl:URL.createObjectURL(blob)});
-  }catch(err){
-    console.error('Error:',err);
-    set({loading:false,error:err.message});
+
+    const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.presentationml.presentation', compression:'DEFLATE'});
+    set({loading:false, success:true, dlUrl:URL.createObjectURL(blob)});
+
+  } catch(err) {
+    console.error('Error:', err);
+    set({loading:false, error:err.message});
   }
 }
 
