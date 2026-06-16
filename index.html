@@ -126,11 +126,29 @@ function makePara(run=null,{noBullet=true,align=null}={}){
   else{const ep=document.createElementNS(NSA,'a:endParaRPr');ep.setAttribute('lang','es-MX');ep.setAttribute('dirty','0');p.appendChild(ep);}
   return p;
 }
-function clearTx(tb){[...tb.getElementsByTagNameNS(NSA,'p')].forEach(p=>tb.removeChild(p));}
-function getShape(doc,name){for(const sp of doc.getElementsByTagNameNS(NSP,'sp')){for(const c of sp.getElementsByTagNameNS(NSP,'cNvPr')){if(c.getAttribute('name')===name)return sp;}}return null;}
-function getFrame(doc,name){for(const gf of doc.getElementsByTagNameNS(NSP,'graphicFrame')){for(const c of gf.getElementsByTagNameNS(NSP,'cNvPr')){if(c.getAttribute('name')===name)return gf;}}return null;}
-function getCell(gf,row,col){const rows=gf.getElementsByTagNameNS(NSA,'tr');if(row>=rows.length)return null;const cells=rows[row].getElementsByTagNameNS(NSA,'tc');if(col>=cells.length)return null;return cells[col].getElementsByTagNameNS(NSA,'txBody')[0]||null;}
-function setCell(gf,r,c,txt,opts={}){const tb=getCell(gf,r,c);if(!tb)return;clearTx(tb);tb.appendChild(makePara(makeRun(txt,opts)));}
+function getShape(doc,name){
+  for(const sp of doc.querySelectorAll('sp')){
+    const c=sp.querySelector('cNvPr');
+    if(c&&c.getAttribute('name')===name)return sp;
+  }return null;
+}
+function getFrame(doc,name){
+  for(const gf of doc.querySelectorAll('graphicFrame')){
+    const c=gf.querySelector('cNvPr');
+    if(c&&c.getAttribute('name')===name)return gf;
+  }return null;
+}
+function getCell(gf,row,col){
+  const rows=gf.querySelectorAll('tr');
+  if(row>=rows.length)return null;
+  const cells=rows[row].querySelectorAll('tc');
+  if(col>=cells.length)return null;
+  return cells[col].querySelector('txBody')||null;
+}
+function clearTx(tb){
+  [...tb.querySelectorAll('p')].forEach(p=>p.parentNode.removeChild(p));
+}
+  function setCell(gf,r,c,txt,opts={}){const tb=getCell(gf,r,c);if(!tb)return;clearTx(tb);tb.appendChild(makePara(makeRun(txt,opts)));}
 
 async function generatePPTX(){
   set({loading:true,error:null});
@@ -147,19 +165,27 @@ async function generatePPTX(){
     const ser=new XMLSerializer();
 
     const hdr=getShape(doc,'Rectangle 6');
-    if(hdr){
-      const tb=hdr.getElementsByTagNameNS(NSA,'txBody')[0];
-      const pp=tb.getElementsByTagNameNS(NSA,'p');
-      if(pp[0]){const p0=pp[0];[...p0.getElementsByTagNameNS(NSA,'r')].forEach(r=>p0.removeChild(r));p0.appendChild(makeRun('The idea of ',{sz:2000,bold:true,color:'FFFFFF'}));p0.appendChild(makeRun(S.mes+' '+S.anio,{sz:2000,bold:true,color:'FFE07D'}));}
-      if(pp[1]){const p1=pp[1];[...p1.getElementsByTagNameNS(NSA,'r')].forEach(r=>p1.removeChild(r));p1.appendChild(makeRun(S.titulo,{sz:1500,bold:true,color:'FFFFFF'}));}
-    }
-    for(const sp of doc.getElementsByTagNameNS(NSP,'sp')){
-      const c=sp.getElementsByTagNameNS(NSP,'cNvPr')[0];
-      if(c&&c.getAttribute('name')==='Rectangle \u00e0 coins arrondis 3'){
-        const tb=sp.getElementsByTagNameNS(NSA,'txBody')[0];
-        if(tb){clearTx(tb);tb.appendChild(makePara(makeRun(S.titulo,{sz:1400,bold:true,color:'1E293B'}),{noBullet:true,align:'ctr'}));}
+    const hdr=getShape(doc,'Rectangle 6');
+      if(hdr){
+        const tb=hdr.querySelector('txBody');
+        const pp=tb.querySelectorAll('p');
+        if(pp[0]){
+          pp[0].querySelectorAll('r').forEach(r=>r.parentNode.removeChild(r));
+          pp[0].appendChild(makeRun('The idea of ',{sz:2000,bold:true,color:'FFFFFF'}));
+          pp[0].appendChild(makeRun(S.mes+' '+S.anio,{sz:2000,bold:true,color:'FFE07D'}));
+        }
+        if(pp[1]){
+          pp[1].querySelectorAll('r').forEach(r=>r.parentNode.removeChild(r));
+          pp[1].appendChild(makeRun(S.titulo,{sz:1500,bold:true,color:'FFFFFF'}));
+        }
       }
-    }
+      for(const sp of doc.querySelectorAll('sp')){
+        const c=sp.querySelector('cNvPr');
+        if(c&&c.getAttribute('name')==='Rectangle \u00e0 coins arrondis 3'){
+          const tb=sp.querySelector('txBody');
+          if(tb){clearTx(tb);tb.appendChild(makePara(makeRun(S.titulo,{sz:1400,bold:true,color:'1E293B'}),{noBullet:true,align:'ctr'}));}
+        }
+      }
     const t13=getFrame(doc,'Tableau 13');
     if(t13){setCell(t13,0,0,'Antes',{sz:1050});setCell(t13,1,0,S.antes_texto,{sz:1100});}
     const t14=getFrame(doc,'Tableau 14');
