@@ -282,7 +282,7 @@ textarea{
 
 .colab-item{
   display:grid;
-  grid-template-columns:1fr 130px 34px;
+  grid-template-columns:1fr 110px 140px 34px;
   gap:7px;
   align-items:center;
 }
@@ -592,7 +592,8 @@ const LIMITS={
   beneficios:250,
   costo:20,
   nombre:45,
-  empleado:10
+  empleado:10,
+  area:35
 };
 
 const S={
@@ -610,7 +611,7 @@ const S={
   despues_img:null,
   beneficios:'',
   costo:'0€',
-  colabs:[{nombre:'',empleado:''}]
+  colabs:[{nombre:'',empleado:'',area:''}]
 };
 
 function set(u){
@@ -1014,9 +1015,12 @@ if(hdr){
 
         if(validos.length){
           validos.forEach(c=>{
-            const txt=c.empleado.trim()
-              ? trimLimit(c.nombre,LIMITS.nombre) + ' #' + trimLimit(c.empleado,LIMITS.empleado)
-              : trimLimit(c.nombre,LIMITS.nombre);
+            const txt=
+            trimLimit(c.nombre,LIMITS.nombre)
+            +' #'+
+            trimLimit(c.empleado,LIMITS.empleado)
+            +' - '+
+            trimLimit(c.area||'',LIMITS.area);
 
             tb.appendChild(
               makePara(
@@ -1420,24 +1424,41 @@ function render(){
       <div class="colab-list" id="cl">
         ${S.colabs.map((c,i)=>`
           <div class="colab-item">
-            <input 
-              type="text" 
-              class="cn" 
-              data-i="${i}" 
-              placeholder="Nombre completo" 
+
+            <input
+              type="text"
+              class="cn"
+              data-i="${i}"
+              placeholder="Nombre"
               value="${esc(c.nombre)}"
               maxlength="${LIMITS.nombre}"
             />
-            <input 
-              type="text" 
-              class="ce" 
-              data-i="${i}" 
-              placeholder="# Empleado" 
+            
+            <input
+              type="text"
+              class="ce"
+              data-i="${i}"
+              placeholder="#"
               value="${esc(c.empleado)}"
               maxlength="${LIMITS.empleado}"
             />
-            <button class="btn-remove" data-i="${i}">&times;</button>
-          </div>
+            
+            <input
+              type="text"
+              class="ca"
+              data-i="${i}"
+              placeholder="Área"
+              value="${esc(c.area||'')}"
+              maxlength="${LIMITS.area}"
+            />
+            
+            <button
+              class="btn-remove"
+              data-i="${i}">
+              &times;
+            </button>
+            
+            </div>
         `).join('')}
       </div>
 
@@ -1653,7 +1674,14 @@ document.querySelectorAll('.ce').forEach(el=>{
     S.colabs[i].empleado=trimLimit(e.target.value,LIMITS.empleado);
   };
 });
-
+  
+document.querySelectorAll('.ca').forEach(el=>{
+  el.oninput=e=>{
+    const i=+e.target.dataset.i;
+    S.colabs[i].area=e.target.value;
+  };
+});
+  
 document.querySelectorAll('.btn-remove').forEach(el=>{
   el.onclick=e=>{
     const i=+e.target.dataset.i;
@@ -1670,7 +1698,7 @@ if(addC){
   addC.onclick=()=>set({
     colabs:[
       ...S.colabs,
-      {nombre:'',empleado:''}
+      {nombre:'',empleado:'',area:''}
     ]
   });
 }
