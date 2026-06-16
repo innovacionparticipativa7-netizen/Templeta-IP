@@ -861,27 +861,22 @@ async function generatePPTX(){
       if(hdr){
         const paras=[...hdr.getElementsByTagName('*')].filter(e=>e.localName==='p');
       
-        if(paras[0]){
-          [...paras[0].getElementsByTagName('*')]
-            .filter(e=>e.localName==='r')
-            .forEach(r=>r.parentNode.removeChild(r));
+              if(paras[0]){
+        [...paras[0].getElementsByTagName('*')]
+          .filter(e=>e.localName==='r')
+          .forEach(r=>r.parentNode.removeChild(r));
       
-          paras[0].appendChild(
-            makeRun('The idea of ',{
+        paras[0].appendChild(
+          makeRun(
+            'The idea of ' + S.mes + ' ' + S.anio,
+            {
               sz:2000,
               bold:true,
               color:'FFFFFF'
-            })
-          );
-      
-          paras[0].appendChild(
-            makeRun(S.mes + ' ' + S.anio,{
-              sz:2000,
-              bold:true,
-              color:'FFE07D'
-            })
-          );
-        }
+            }
+          )
+        );
+      }
       
         if(paras[1]){
           [...paras[1].getElementsByTagName('*')]
