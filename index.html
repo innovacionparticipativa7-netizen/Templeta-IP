@@ -43,17 +43,83 @@ header{
   height:58px;
   display:flex;
   align-items:center;
+  justify-content:space-between;
   gap:14px;
+}
+
+.header-left{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-width:0;
 }
 
 .logo{
   font-size:20px;
   font-weight:800;
   color:#fff;
+  white-space:nowrap;
 }
 
 .logo span{
   color:var(--gold);
+}
+
+.subtitle{
+  font-size:13px;
+  opacity:.75;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.header-badges{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-shrink:0;
+}
+
+.badge{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  background:rgba(255,255,255,.12);
+  border:1.5px solid rgba(255,255,255,.35);
+  border-radius:8px;
+  padding:5px 10px;
+  height:34px;
+}
+
+.badge-icon{
+  width:24px;
+  height:24px;
+  border-radius:6px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+  font-size:11px;
+  flex-shrink:0;
+  color:#fff;
+}
+
+.badge-5s .badge-icon{ background:var(--success); }
+.badge-hse .badge-icon{ background:var(--gold); color:#7A5B00; }
+
+.badge-label{
+  font-size:11px;
+  font-weight:700;
+  color:#fff;
+  line-height:1.1;
+  white-space:nowrap;
+}
+
+.badge-label small{
+  display:block;
+  font-size:9px;
+  font-weight:500;
+  opacity:.8;
 }
 
 .subtitle{
@@ -556,6 +622,11 @@ textarea{
   .colab-headers{ grid-template-columns:1fr 90px 34px; }
   .step-label{ display:none; }
   .step-item{ width:50px; }
+  header{ padding:0 14px; gap:8px; }
+  .subtitle{ display:none; }
+  .badge-label{ display:none; }
+  .badge{ padding:5px 8px; }
+  .header-badges{ gap:6px; }
 }
 </style>
 </head>
@@ -563,8 +634,20 @@ textarea{
 <body>
 
 <header>
-  <div class="logo">Innovacion Participativa<span>+</span></div>
-  <div class="subtitle">Generador de Idea de Propuesta (IP) – Tijuana</div>
+  <div class="header-left">
+    <div class="logo">Innovacion Participativa<span>+</span></div>
+    <div class="subtitle">Generador de Idea de Propuesta (IP) – Tijuana</div>
+  </div>
+  <div class="header-badges">
+    <div class="badge badge-5s" title="Programa 5S">
+      <span class="badge-icon">5S</span>
+      <span class="badge-label">5S<small>Orden y limpieza</small></span>
+    </div>
+    <div class="badge badge-hse" title="Seguridad, Salud y Ambiente">
+      <span class="badge-icon">HSE</span>
+      <span class="badge-label">HSE<small>Seguridad y Ambiente</small></span>
+    </div>
+  </div>
 </header>
 
 <div class="container" id="app"></div>
