@@ -6,6 +6,23 @@
 <title>Generador IP de templeta</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script>
+  const firebaseConfig = {
+const firebaseConfig = {
+  apiKey: "AIzaSyCUTsQmjvGirqezG2YsPuH9V0DlAKs-Obg",
+  authDomain: "ip-templeta.firebaseapp.com",
+  projectId: "ip-templeta",
+  storageBucket: "ip-templeta.firebasestorage.app",
+  messagingSenderId: "335181477791",
+  appId: "1:335181477791:web:20ad98345931cd4be1afaa"
+};
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+</script>
+  
+  
 
 <style>
 :root{
@@ -1332,8 +1349,9 @@ render();
   <script>
 (function(){
   // 🔐 Cambia esta contraseña por la tuya
-  const ADMIN_PASSWORD = 'ip2025';
-  const STORAGE_KEY = 'ip_generator_log_v1';
+  const ADMIN_PASSWORD = 'ip2026';
+  const COLLECTION = 'ip_records';
+  let cachedRecords = [];
 
   /* ---------- Estilos ---------- */
   const style = document.createElement('style');
@@ -1379,11 +1397,16 @@ render();
     }
     .admin-stat b{ display:block; font-size:22px; color:var(--blue); }
     .admin-stat span{ font-size:11px; color:var(--g600); text-transform:uppercase; letter-spacing:.4px; }
-    .admin-toolbar{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+    .admin-toolbar{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
     .admin-toolbar input, .admin-toolbar select{
       padding:8px 10px; border:2px solid var(--g200); border-radius:8px; font-size:13px;
     }
     .admin-toolbar input{ flex:1; min-width:160px; }
+    .admin-refresh{
+      background:var(--g100); border:2px solid var(--g200); border-radius:8px;
+      padding:8px 12px; cursor:pointer; font-size:13px; color:var(--g600);
+    }
+    .admin-refresh:hover{ background:var(--g200); }
     .admin-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
     .admin-table th{
       background:var(--g100); text-align:left; padding:8px 10px;
@@ -1398,6 +1421,11 @@ render();
       flex-wrap:wrap; justify-content:space-between;
     }
     .admin-actions .left, .admin-actions .right{ display:flex; gap:8px; flex-wrap:wrap; }
+    .admin-spinner{
+      width:34px; height:34px; border:3px solid var(--g200); border-top-color:var(--blue);
+      border-radius:50%; margin:0 auto 12px; animation:adminspin .8s linear infinite;
+    }
+    @keyframes adminspin{ to{ transform:rotate(360deg); } }
   `;
   document.head.appendChild(style);
 
@@ -1409,25 +1437,20 @@ render();
   fab.onclick = openAdminLogin;
   document.body.appendChild(fab);
 
-  /* ---------- Almacenamiento local ---------- */
-  function getRecords(){
-    try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
-    catch(e){ return []; }
-  }
-  function saveRecords(list){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  }
-  window.__logGeneratedIP = function(){
-    const list = getRecords();
-    list.push({
-      id: Date.now() + '-' + Math.random().toString(36).slice(2,7),
+  /* ---------- Guardar en Firebase ---------- */
+  window.__logGeneratedIP = async function(){
+    const record = {
       fecha: new Date().toISOString(),
       mes: S.mes, anio: S.anio, titulo: S.titulo, costo: S.costo,
       bp: S.bp || '',
       autores: (S.colabs || []).filter(c=>c.nombre.trim())
         .map(c=>({nombre:c.nombre, empleado:c.empleado, area:c.area}))
-    });
-    saveRecords(list);
+    };
+    try{
+      await db.collection(COLLECTION).add(record);
+    }catch(e){
+      console.error('No se pudo guardar el registro en Firebase:', e);
+    }
   };
 
   /* ---------- Engancha tu función de generación existente ---------- */
@@ -1435,7 +1458,7 @@ render();
   if (typeof _origGeneratePPTX === 'function'){
     window.generatePPTX = async function(){
       await _origGeneratePPTX();
-      if (typeof S !== 'undefined' && S.success){ window.__logGeneratedIP(); }
+      if (typeof S !== 'undefined' && S.success){ await window.__logGeneratedIP(); }
     };
   }
 
@@ -1472,7 +1495,7 @@ render();
   }
 
   /* ---------- Panel principal ---------- */
-  function openAdminPanel(){
+  async function openAdminPanel(){
     const overlay = document.createElement('div');
     overlay.className = 'admin-overlay';
     overlay.innerHTML = `
@@ -1492,23 +1515,37 @@ render();
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    const bodyEl = overlay.querySelector('#adminBody');
     overlay.querySelector('#adminClosePanel').onclick = ()=>overlay.remove();
     overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
     overlay.querySelector('#adminExport').onclick = exportToExcel;
-    overlay.querySelector('#adminClear').onclick = ()=>{
-      if(confirm('¿Seguro que quieres borrar TODOS los registros de este navegador? Esta acción no se puede deshacer.')){
-        saveRecords([]);
-        renderAdminBody(overlay.querySelector('#adminBody'), '', '');
+    overlay.querySelector('#adminClear').onclick = async ()=>{
+      if(confirm('¿Seguro que quieres borrar TODOS los registros de Firebase? Esta acción no se puede deshacer.')){
+        for(const r of cachedRecords){
+          try{ await db.collection(COLLECTION).doc(r.id).delete(); }catch(e){ console.error(e); }
+        }
+        await loadAndRender(bodyEl, '', '');
       }
     };
-    renderAdminBody(overlay.querySelector('#adminBody'), '', '');
+    await loadAndRender(bodyEl, '', '');
+  }
+
+  async function loadAndRender(container, search, monthFilter){
+    container.innerHTML = '<div class="admin-empty"><div class="admin-spinner"></div>Cargando registros desde Firebase...</div>';
+    try{
+      const snap = await db.collection(COLLECTION).orderBy('fecha','desc').get();
+      cachedRecords = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    }catch(e){
+      container.innerHTML = '<div class="admin-empty">⚠️ Error al conectar con Firebase: '+esc(e.message)+'</div>';
+      return;
+    }
+    renderAdminBody(container, search||'', monthFilter||'');
   }
 
   function renderAdminBody(container, search, monthFilter){
-    const all = getRecords().sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
-    const months = [...new Set(all.map(r=>r.mes+' '+r.anio))];
-    const filtered = all.filter(r=>{
-      const text = (r.titulo+' '+r.autores.map(a=>a.nombre).join(' ')).toLowerCase();
+    const months = [...new Set(cachedRecords.map(r=>r.mes+' '+r.anio))];
+    const filtered = cachedRecords.filter(r=>{
+      const text = (r.titulo+' '+(r.autores||[]).map(a=>a.nombre).join(' ')).toLowerCase();
       const okSearch = !search || text.includes(search.toLowerCase());
       const okMonth = !monthFilter || (r.mes+' '+r.anio)===monthFilter;
       return okSearch && okMonth;
@@ -1516,7 +1553,7 @@ render();
 
     container.innerHTML = `
       <div class="admin-stats">
-        <div class="admin-stat"><b>${all.length}</b><span>Total generadas</span></div>
+        <div class="admin-stat"><b>${cachedRecords.length}</b><span>Total generadas</span></div>
         <div class="admin-stat"><b>${filtered.length}</b><span>Mostrando</span></div>
         <div class="admin-stat"><b>${months.length}</b><span>Meses con registros</span></div>
       </div>
@@ -1526,8 +1563,9 @@ render();
           <option value="">Todos los meses</option>
           ${months.map(m=>`<option value="${esc(m)}" ${m===monthFilter?'selected':''}>${esc(m)}</option>`).join('')}
         </select>
+        <button class="admin-refresh" id="adminRefresh">🔄 Actualizar</button>
       </div>
-      ${filtered.length===0 ? `<div class="admin-empty">Aún no hay presentaciones generadas en este navegador.</div>` : `
+      ${filtered.length===0 ? `<div class="admin-empty">No hay presentaciones generadas todavía.</div>` : `
       <div style="overflow:auto;max-height:340px;border:1px solid var(--g200);border-radius:8px">
         <table class="admin-table">
           <thead><tr>
@@ -1539,7 +1577,7 @@ render();
                 <td>${new Date(r.fecha).toLocaleString('es-MX')}</td>
                 <td>${esc(r.mes)} ${esc(r.anio)}</td>
                 <td>${esc(r.titulo)}</td>
-                <td>${r.autores.map(a=>esc(a.nombre)+(a.area?' ('+esc(a.area)+')':'')).join('<br/>')}</td>
+                <td>${(r.autores||[]).map(a=>esc(a.nombre)+(a.area?' ('+esc(a.area)+')':'')).join('<br/>')}</td>
                 <td>${esc(r.costo||'')}</td>
                 <td>${r.bp==='5s'?'5S':r.bp==='hse'?'HSE':'—'}</td>
               </tr>`).join('')}
@@ -1550,20 +1588,20 @@ render();
 
     container.querySelector('#adminSearch').oninput = e=>renderAdminBody(container, e.target.value, monthFilter);
     container.querySelector('#adminMonth').onchange = e=>renderAdminBody(container, search, e.target.value);
+    container.querySelector('#adminRefresh').onclick = ()=>loadAndRender(container, search, monthFilter);
   }
 
   /* ---------- Exportar a Excel ---------- */
   function exportToExcel(){
-    const all = getRecords();
-    if (!all.length){ alert('No hay registros para exportar.'); return; }
-    const rows = all.map(r=>({
+    if (!cachedRecords.length){ alert('No hay registros para exportar.'); return; }
+    const rows = cachedRecords.map(r=>({
       'Fecha': new Date(r.fecha).toLocaleString('es-MX'),
       'Mes': r.mes,
       'Año': r.anio,
       'Título': r.titulo,
-      'Autores': r.autores.map(a=>a.nombre).join('; '),
-      'Números de empleado': r.autores.map(a=>a.empleado).join('; '),
-      'Áreas': r.autores.map(a=>a.area).join('; '),
+      'Autores': (r.autores||[]).map(a=>a.nombre).join('; '),
+      'Números de empleado': (r.autores||[]).map(a=>a.empleado).join('; '),
+      'Áreas': (r.autores||[]).map(a=>a.area).join('; '),
       'Costo': r.costo,
       'Buena práctica': r.bp==='5s'?'5S':r.bp==='hse'?'HSE':'No aplica'
     }));
@@ -1575,6 +1613,7 @@ render();
   }
 })();
 </script>
+ 
 
 </body>
 </html>
