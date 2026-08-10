@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Generador IP de templeta</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <style>
 :root{
@@ -1327,6 +1328,252 @@ function render(){
 }
 
 render();
+</script>
+  <script>
+(function(){
+  // 🔐 Cambia esta contraseña por la tuya
+  const ADMIN_PASSWORD = 'ip2025';
+  const STORAGE_KEY = 'ip_generator_log_v1';
+
+  /* ---------- Estilos ---------- */
+  const style = document.createElement('style');
+  style.textContent = `
+    .admin-fab{
+      position:fixed; bottom:24px; left:24px; z-index:998;
+      width:44px; height:44px; border-radius:50%;
+      background:#1E293B; color:#fff; border:none; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      font-size:18px; box-shadow:0 4px 14px rgba(0,0,0,.25);
+      transition:transform .2s, background .2s;
+    }
+    .admin-fab:hover{ background:var(--blue); transform:translateY(-2px); }
+    .admin-overlay{
+      position:fixed; inset:0; background:rgba(15,23,42,.55);
+      display:flex; align-items:center; justify-content:center;
+      z-index:999; padding:20px;
+    }
+    .admin-box{
+      background:#fff; border-radius:14px; width:100%; max-width:920px;
+      max-height:88vh; display:flex; flex-direction:column;
+      box-shadow:0 20px 60px rgba(0,0,0,.35); overflow:hidden;
+    }
+    .admin-head{
+      background:var(--blue); color:#fff; padding:18px 24px;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .admin-head h2{ font-size:17px; margin:0; }
+    .admin-close{
+      background:rgba(255,255,255,.15); border:none; color:#fff;
+      width:30px; height:30px; border-radius:8px; cursor:pointer; font-size:16px;
+    }
+    .admin-body{ padding:22px 24px; overflow-y:auto; }
+    .admin-login{ text-align:center; padding:30px 10px; }
+    .admin-login input{
+      width:220px; padding:10px 12px; border:2px solid var(--g200);
+      border-radius:8px; font-size:14px; margin:14px 0; text-align:center;
+    }
+    .admin-stats{ display:flex; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+    .admin-stat{
+      flex:1; min-width:120px; background:var(--g50); border:1px solid var(--g200);
+      border-radius:10px; padding:12px 14px;
+    }
+    .admin-stat b{ display:block; font-size:22px; color:var(--blue); }
+    .admin-stat span{ font-size:11px; color:var(--g600); text-transform:uppercase; letter-spacing:.4px; }
+    .admin-toolbar{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+    .admin-toolbar input, .admin-toolbar select{
+      padding:8px 10px; border:2px solid var(--g200); border-radius:8px; font-size:13px;
+    }
+    .admin-toolbar input{ flex:1; min-width:160px; }
+    .admin-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+    .admin-table th{
+      background:var(--g100); text-align:left; padding:8px 10px;
+      position:sticky; top:0; font-size:11px; text-transform:uppercase;
+      color:var(--g600); letter-spacing:.3px;
+    }
+    .admin-table td{ padding:8px 10px; border-bottom:1px solid var(--g100); vertical-align:top; }
+    .admin-table tr:hover td{ background:#F8FAFC; }
+    .admin-empty{ text-align:center; padding:40px 10px; color:var(--g400); }
+    .admin-actions{
+      display:flex; gap:8px; padding:16px 24px; border-top:2px solid var(--g100);
+      flex-wrap:wrap; justify-content:space-between;
+    }
+    .admin-actions .left, .admin-actions .right{ display:flex; gap:8px; flex-wrap:wrap; }
+  `;
+  document.head.appendChild(style);
+
+  /* ---------- Botón flotante ---------- */
+  const fab = document.createElement('button');
+  fab.className = 'admin-fab';
+  fab.title = 'Panel de administrador';
+  fab.innerHTML = '🔒';
+  fab.onclick = openAdminLogin;
+  document.body.appendChild(fab);
+
+  /* ---------- Almacenamiento local ---------- */
+  function getRecords(){
+    try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+    catch(e){ return []; }
+  }
+  function saveRecords(list){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  }
+  window.__logGeneratedIP = function(){
+    const list = getRecords();
+    list.push({
+      id: Date.now() + '-' + Math.random().toString(36).slice(2,7),
+      fecha: new Date().toISOString(),
+      mes: S.mes, anio: S.anio, titulo: S.titulo, costo: S.costo,
+      bp: S.bp || '',
+      autores: (S.colabs || []).filter(c=>c.nombre.trim())
+        .map(c=>({nombre:c.nombre, empleado:c.empleado, area:c.area}))
+    });
+    saveRecords(list);
+  };
+
+  /* ---------- Engancha tu función de generación existente ---------- */
+  const _origGeneratePPTX = window.generatePPTX;
+  if (typeof _origGeneratePPTX === 'function'){
+    window.generatePPTX = async function(){
+      await _origGeneratePPTX();
+      if (typeof S !== 'undefined' && S.success){ window.__logGeneratedIP(); }
+    };
+  }
+
+  /* ---------- Login ---------- */
+  function openAdminLogin(){
+    const overlay = document.createElement('div');
+    overlay.className = 'admin-overlay';
+    overlay.innerHTML = `
+      <div class="admin-box" style="max-width:380px">
+        <div class="admin-head"><h2>🔒 Acceso administrador</h2>
+          <button class="admin-close" id="adminCloseLogin">✕</button></div>
+        <div class="admin-body admin-login">
+          <p style="color:var(--g600);font-size:13px">Ingresa la contraseña para ver el panel de reportes.</p>
+          <input type="password" id="adminPwd" placeholder="Contraseña" />
+          <div id="adminLoginErr" style="color:var(--danger);font-size:12px;min-height:16px"></div>
+          <button class="btn btn-primary" id="adminLoginBtn" style="width:100%">Entrar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const pwdInput = overlay.querySelector('#adminPwd');
+    pwdInput.focus();
+    function tryLogin(){
+      if (pwdInput.value === ADMIN_PASSWORD){
+        overlay.remove();
+        openAdminPanel();
+      } else {
+        overlay.querySelector('#adminLoginErr').textContent = 'Contraseña incorrecta';
+      }
+    }
+    overlay.querySelector('#adminLoginBtn').onclick = tryLogin;
+    pwdInput.addEventListener('keydown', e=>{ if(e.key==='Enter') tryLogin(); });
+    overlay.querySelector('#adminCloseLogin').onclick = ()=>overlay.remove();
+    overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
+  }
+
+  /* ---------- Panel principal ---------- */
+  function openAdminPanel(){
+    const overlay = document.createElement('div');
+    overlay.className = 'admin-overlay';
+    overlay.innerHTML = `
+      <div class="admin-box">
+        <div class="admin-head">
+          <h2>📊 Panel de administrador — IPs generadas</h2>
+          <button class="admin-close" id="adminClosePanel">✕</button>
+        </div>
+        <div class="admin-body" id="adminBody"></div>
+        <div class="admin-actions">
+          <div class="left">
+            <button class="btn btn-secondary" id="adminClear">🗑️ Borrar registros</button>
+          </div>
+          <div class="right">
+            <button class="btn btn-primary" id="adminExport">⬇️ Exportar a Excel</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#adminClosePanel').onclick = ()=>overlay.remove();
+    overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
+    overlay.querySelector('#adminExport').onclick = exportToExcel;
+    overlay.querySelector('#adminClear').onclick = ()=>{
+      if(confirm('¿Seguro que quieres borrar TODOS los registros de este navegador? Esta acción no se puede deshacer.')){
+        saveRecords([]);
+        renderAdminBody(overlay.querySelector('#adminBody'), '', '');
+      }
+    };
+    renderAdminBody(overlay.querySelector('#adminBody'), '', '');
+  }
+
+  function renderAdminBody(container, search, monthFilter){
+    const all = getRecords().sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+    const months = [...new Set(all.map(r=>r.mes+' '+r.anio))];
+    const filtered = all.filter(r=>{
+      const text = (r.titulo+' '+r.autores.map(a=>a.nombre).join(' ')).toLowerCase();
+      const okSearch = !search || text.includes(search.toLowerCase());
+      const okMonth = !monthFilter || (r.mes+' '+r.anio)===monthFilter;
+      return okSearch && okMonth;
+    });
+
+    container.innerHTML = `
+      <div class="admin-stats">
+        <div class="admin-stat"><b>${all.length}</b><span>Total generadas</span></div>
+        <div class="admin-stat"><b>${filtered.length}</b><span>Mostrando</span></div>
+        <div class="admin-stat"><b>${months.length}</b><span>Meses con registros</span></div>
+      </div>
+      <div class="admin-toolbar">
+        <input type="text" id="adminSearch" placeholder="Buscar por título o autor..." value="${esc(search)}"/>
+        <select id="adminMonth">
+          <option value="">Todos los meses</option>
+          ${months.map(m=>`<option value="${esc(m)}" ${m===monthFilter?'selected':''}>${esc(m)}</option>`).join('')}
+        </select>
+      </div>
+      ${filtered.length===0 ? `<div class="admin-empty">Aún no hay presentaciones generadas en este navegador.</div>` : `
+      <div style="overflow:auto;max-height:340px;border:1px solid var(--g200);border-radius:8px">
+        <table class="admin-table">
+          <thead><tr>
+            <th>Fecha</th><th>Mes</th><th>Título</th><th>Autores</th><th>Costo</th><th>BP</th>
+          </tr></thead>
+          <tbody>
+            ${filtered.map(r=>`
+              <tr>
+                <td>${new Date(r.fecha).toLocaleString('es-MX')}</td>
+                <td>${esc(r.mes)} ${esc(r.anio)}</td>
+                <td>${esc(r.titulo)}</td>
+                <td>${r.autores.map(a=>esc(a.nombre)+(a.area?' ('+esc(a.area)+')':'')).join('<br/>')}</td>
+                <td>${esc(r.costo||'')}</td>
+                <td>${r.bp==='5s'?'5S':r.bp==='hse'?'HSE':'—'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    `;
+
+    container.querySelector('#adminSearch').oninput = e=>renderAdminBody(container, e.target.value, monthFilter);
+    container.querySelector('#adminMonth').onchange = e=>renderAdminBody(container, search, e.target.value);
+  }
+
+  /* ---------- Exportar a Excel ---------- */
+  function exportToExcel(){
+    const all = getRecords();
+    if (!all.length){ alert('No hay registros para exportar.'); return; }
+    const rows = all.map(r=>({
+      'Fecha': new Date(r.fecha).toLocaleString('es-MX'),
+      'Mes': r.mes,
+      'Año': r.anio,
+      'Título': r.titulo,
+      'Autores': r.autores.map(a=>a.nombre).join('; '),
+      'Números de empleado': r.autores.map(a=>a.empleado).join('; '),
+      'Áreas': r.autores.map(a=>a.area).join('; '),
+      'Costo': r.costo,
+      'Buena práctica': r.bp==='5s'?'5S':r.bp==='hse'?'HSE':'No aplica'
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{wch:18},{wch:10},{wch:8},{wch:40},{wch:30},{wch:20},{wch:30},{wch:10},{wch:14}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'IPs Generadas');
+    XLSX.writeFile(wb, `IPs_Generadas_${new Date().toISOString().slice(0,10)}.xlsx`);
+  }
+})();
 </script>
 
 </body>
