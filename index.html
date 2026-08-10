@@ -9,16 +9,38 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script>
-  const firebaseConfig = {
-  apiKey: "AIzaSyCUTsQmjvGirqezG2YsPuH9V0DlAKs-Obg",
-  authDomain: "ip-templeta.firebaseapp.com",
-  projectId: "ip-templeta",
-  storageBucket: "ip-templeta.firebasestorage.app",
-  messagingSenderId: "335181477791",
-  appId: "1:335181477791:web:20ad98345931cd4be1afaa"
-};
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
+  window.db = null;
+  try {
+    console.log('1) Iniciando configuración de Firebase...');
+
+    if (typeof firebase === 'undefined') {
+      throw new Error('El SDK de Firebase (firebase-app-compat.js / firebase-firestore-compat.js) no cargó. Revisa la pestaña Network del navegador para ver si esos dos <script src> devuelven error 404 o están bloqueados.');
+    }
+    console.log('2) SDK de firebase detectado OK.');
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCUTsQmjvGirqezG2YsPuH9V0DlAKs-Obg",
+      authDomain: "ip-templeta.firebaseapp.com",
+      projectId: "ip-templeta",
+      storageBucket: "ip-templeta.firebasestorage.app",
+      messagingSenderId: "335181477791",
+      appId: "1:335181477791:web:20ad98345931cd4be1afaa"
+    };
+
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+      console.log('3) initializeApp() ejecutado OK.');
+    } else {
+      console.log('3) Ya existía una app de Firebase inicializada, se reutiliza.');
+    }
+
+    window.db = firebase.firestore();
+    console.log('4) ✅ Firestore listo. window.db =', window.db);
+
+  } catch (e) {
+    console.error('❌ Error inicializando Firebase en el paso anterior:', e.message);
+    alert('⚠️ Firebase no se pudo inicializar:\n\n' + e.message);
+  }
 </script>
   
   
